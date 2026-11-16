@@ -36,5 +36,5 @@ Lemo-Opuscar, onetake, collage b-roll, animation base, HyperFrames (HeyGen) depo
 ## Efektler ve hareket desenleri
 41 video efekti (1. paket 20, 2. paket 21) ve 38 hareket deseninin tarifleri bu klasördeki
 `efektler/` dosyalarında: 01 hareket desenleri, 02-03 efekt paketleri, 04 tam stil kataloğu,
-05 ek teknikler, 00 kurallar ve kontrol listesi. Kaynak: `kodla-cizim-stil-kutuphanesi` becerisi.
+05 ek teknikler, 06 Claude animasyonları (50 hareket kalıbı, 20'si 3B), 00 kurallar ve kontrol listesi. Kaynak: `kodla-cizim-stil-kutuphanesi` becerisi.
 Bunlar tarif (reçete); her efekt `f(ctx, u, t)` saf fonksiyon olarak bu tariften kodlanır.
