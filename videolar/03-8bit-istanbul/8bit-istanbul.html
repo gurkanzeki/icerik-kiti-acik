@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>8-Bit İstanbul</title>
+<style>
+  html,body{margin:0;height:100%;background:#000}
+  body{display:flex;align-items:center;justify-content:center;overflow:hidden}
+  canvas{width:min(100vw,calc(100vh*9/16));height:auto;aspect-ratio:9/16;display:block;image-rendering:pixelated}
+  #ses{position:fixed;right:12px;bottom:12px;font:bold 14px monospace;letter-spacing:1px;background:#000;color:#fce08a;border:3px solid #fce08a;padding:8px 12px;cursor:pointer}
+  #ses:hover{background:#fce08a;color:#000}
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<button id="ses">♪ SES AÇ</button>
+<script>
+// 8-Bit İstanbul — 180×320 gerçek piksel ×6 = 1080×1920, 6 sn kusursuz döngü.
+// Her hareket sin(2π·k·T) (k tam sayı) ya da tam periyot kaydırma; zaman 20 fps adımlı.
+const W = 180, H = 320, SC = 6, HZ = 164, LOOP = 6;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const lo = document.createElement('canvas'); lo.width = W; lo.height = H;
+const g = lo.getContext('2d');
+const img = g.createImageData(W, H);
+let B = new Uint32Array(img.data.buffer);
+
+const col = h => { const n = parseInt(h.slice(1), 16); return ((255 << 24) | ((n & 255) << 16) | (((n >> 8) & 255) << 8) | (n >> 16)) >>> 0; };
+const K = {};
+const PAL = {
+  black:'#000000', hud:'#6b1f7a',
+  s0:'#1a0b3b', s1:'#2e0f5a', s2:'#4a1670', s3:'#7a2278', s4:'#b2346e', s5:'#e0525a', s6:'#f8873c', s7:'#fcb45c',
+  sunA:'#fcf4c0', sunB:'#fce08a', sunC:'#f8b800', sunD:'#f87830',
+  far:'#4a1a5e', city:'#2c0d42', sil:'#1a0830', rim:'#f8873c', win:'#fcd86c', win2:'#fca044',
+  cl:'#c8467a', clh:'#f87858', cld:'#8a2a6e',
+  wA:'#6a2a7e', wB:'#3e2a8c', wC:'#22308c', wD:'#162878', wE:'#0d1a5c', wF:'#0a1248',
+  wv1:'#7a4aa8', wv2:'#3a5ac8', wv3:'#5c8cfc', wv4:'#a8d0fc',
+  white:'#fcfcfc', grey:'#bcbcbc', dgrey:'#7c7c9c', red:'#d82800',
+  stone:'#c86070', stoneD:'#8a3a6a', lead:'#6c6c9c', rock:'#2a0f40', rockH:'#4a1c5e',
+  hull:'#14142c', funnel:'#f8b800', funnelD:'#c88000', glass:'#1c2a5c', warm:'#fce0a8',
+  star:'#c8c8fc', starA:'#a8a8fc', cat:'#05020c', pier:'#1a0830', pier2:'#2e0f44',
+  smoke1:'#d8d8e8', smoke2:'#9c9cbc', halo:'#f8873c', heart:'#f83800'
+};
+for (const k in PAL) K[k] = col(PAL[k]);
+
+// --- yardımcılar ---
+const BY = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5].map(v => (v + .5) / 16);
+const bay = (x, y) => BY[((y & 3) << 2) | (x & 3)];
+function P(x, y, c) { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < W && y >= 0 && y < H) B[y * W + x] = c; }
+function R(x, y, w, h, c) {
+  x = Math.round(x); y = Math.round(y);
+  const x0 = Math.max(0, x), x1 = Math.min(W, x + w), y0 = Math.max(0, y), y1 = Math.min(H, y + h);
+  for (let j = y0; j < y1; j++) for (let i = x0; i < x1; i++) B[j * W + i] = c;
+}
+function disc(cx, cy, r, c, dens = 1, topOnly = false) {
+  cx = Math.round(cx); cy = Math.round(cy);
+  for (let dy = -r; dy <= (topOnly ? 0 : r); dy++) {
+    const hw = Math.floor(Math.sqrt((r + .5) * (r + .5) - dy * dy));
+    for (let dx = -hw; dx <= hw; dx++) {
+      const x = cx + dx, y = cy + dy;
+      if (dens >= 1 || bay(x, y) < dens) P(x, y, c);
+    }
+  }
+}
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const TAU = Math.PI * 2;
+
+// --- piksel yazı (3×5) ---
+const GL = {
+  'A':['.#.','#.#','###','#.#','#.#'], 'B':['##.','#.#','##.','#.#','##.'], 'D':['##.','#.#','#.#','#.#','##.'],
+  'I':['###','.#.','.#.','.#.','###'], 'K':['#.#','#.#','##.','#.#','#.#'], 'L':['#..','#..','#..','#..','###'],
+  'N':['#.#','###','###','#.#','#.#'], 'O':['###','#.#','#.#','#.#','###'], 'R':['##.','#.#','##.','#.#','#.#'],
+  'S':['###','#..','###','..#','###'], 'T':['###','.#.','.#.','.#.','.#.'], 'U':['#.#','#.#','#.#','#.#','###'],
+  'Y':['#.#','#.#','.#.','.#.','.#.'], '-':['...','...','###','...','...'], ' ':['...','...','...','...','...'],
+  '0':['###','#.#','#.#','#.#','###'], '1':['.#.','##.','.#.','.#.','###'], '3':['###','..#','###','..#','###'],
+  '4':['#.#','#.#','###','..#','..#'], '5':['###','#..','###','..#','###']
+};
+const MARK = { 'İ':['I',[1]], 'Ü':['U',[0,2]] };
+function text(str, x, y, s, cf) {
+  for (const ch of str) {
+    const m = MARK[ch], gl = GL[m ? m[0] : ch] || GL[' '];
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
+      if (gl[r][c] === '#') for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) { const px = x + c * s + b, py = y + r * s + a; P(px, py, cf(px, py)); }
+    if (m) for (const c of m[1]) for (let a = 0; a < s; a++) for (let b = 0; b < s; b++) { const px = x + c * s + b, py = y - 2 * s + a; P(px, py, cf(px, py)); }
+    x += 4 * s;
+  }
+}
+
+// --- sabit zemin: dither'lı gök ve su gradyanı ---
+const BG = new Uint32Array(W * H);
+(function () {
+  const grad = (y0, y1, cs) => {
+    for (let y = y0; y < y1; y++) {
+      const f = (y - y0) / (y1 - y0 - 1) * (cs.length - 1), i = Math.min(cs.length - 2, Math.floor(f)), fr = f - i;
+      for (let x = 0; x < W; x++) BG[y * W + x] = bay(x, y) < fr ? K[cs[i + 1]] : K[cs[i]];
+    }
+  };
+  for (let i = 0; i < W * 10; i++) BG[i] = K.black;
+  grad(10, HZ, ['s0','s1','s2','s3','s4','s5','s6','s7']);
+  grad(HZ, H, ['wA','wB','wC','wD','wE','wF']);
+})();
+
+// --- tohumlu sahne verisi ---
+const rnd = mulberry32(1453);
+const STARS = Array.from({ length: 46 }, () => ({ x: Math.floor(rnd() * W), y: 11 + Math.floor(rnd() * 80), k: 1 + Math.floor(rnd() * 3), ph: rnd() * TAU }));
+const HOUSES = []; for (let x = -8; x < W + 8;) { const w = 3 + Math.floor(rnd() * 4), h = 2 + Math.floor(rnd() * 6); HOUSES.push({ x, w, h, win: rnd() < .55 ? Math.floor(rnd() * w) : -1, k: 1 + Math.floor(rnd() * 2), ph: rnd() * TAU }); x += w + Math.floor(rnd() * 2); }
+const blink = (k, ph, T, th = -.7) => Math.sin(TAU * k * T + ph) > th;
+
+// --- sahne parçaları ---
+function farHills(c) { for (let x = 0; x < W; x++) { const u = x - c; const h = HZ - 11 - Math.round(4 * Math.sin(u * .045 + .5) + 3 * Math.sin(u * .11 + 1.3) + 2 * Math.sin(u * .23)); R(x, h, 1, HZ - h, K.far); } }
+const cityLine = u => HZ - 4 - Math.round(2 * Math.sin(u * .07) + 1.5 * Math.sin(u * .19 + 2));
+function city(c, T) {
+  for (let x = 0; x < W; x++) { const h = cityLine(x - c); R(x, h, 1, HZ - h, K.city); }
+  for (const o of HOUSES) {
+    const x = o.x + c, top = cityLine(o.x + o.w / 2) - o.h;
+    R(x, top, o.w, HZ - top, K.city);
+    if (o.win >= 0 && blink(o.k, o.ph, T)) P(x + o.win, top + 1 + (o.h > 4 ? 1 : 0), K.win2);
+  }
+}
+function galata(gx, T) {
+  const S = K.sil;
+  R(gx - 6, 124, 12, 40, S); R(gx + 5, 124, 1, 40, K.rim);
+  for (const y of [130, 140, 150]) for (const x of [gx - 3, gx + 2]) if (blink(1, x * .7 + y, T, -.8)) R(x, y, 1, 2, K.win);
+  R(gx - 8, 121, 16, 2, S); for (let x = gx - 8; x < gx + 8; x += 2) P(x, 120, S); R(gx + 7, 121, 1, 2, K.rim);
+  R(gx - 5, 111, 10, 10, S); R(gx + 4, 111, 1, 10, K.rim);
+  for (const x of [gx - 3, gx - 1, gx, gx + 2]) R(x, 114, 1, 3, K.win2);
+  for (let j = 0; j < 14; j++) { const hw = Math.max(1, Math.round(j / 13 * 5.5)); R(gx - hw, 97 + j, hw * 2, 1, S); P(gx + hw - 1, 97 + j, j > 3 ? K.rim : S); }
+  R(gx - 1, 92, 2, 5, S);
+}
+function minaret(x, y0) {
+  const S = K.sil;
+  R(x - 1, y0, 3, HZ - y0, S); R(x - 2, y0 + 12, 5, 1, S); R(x - 2, y0 + 24, 5, 1, S);
+  R(x - 1, y0 - 1, 3, 1, S); R(x, y0 - 5, 1, 4, S); P(x + 1, y0 + 2, K.rim);
+}
+function mosque(mx) {
+  const S = K.sil;
+  minaret(mx - 34, 120); minaret(mx + 34, 120); minaret(mx - 27, 111); minaret(mx + 27, 111);
+  R(mx - 24, 146, 49, 18, S);
+  disc(mx - 22, 147, 4, S, 1, true); disc(mx + 22, 147, 4, S, 1, true);
+  disc(mx - 14, 147, 8, S, 1, true); disc(mx + 14, 147, 8, S, 1, true);
+  R(mx - 13, 141, 27, 6, S); disc(mx, 141, 13, S, 1, true);
+  R(mx, 123, 1, 5, S); P(mx + 1, 122, K.sunB);
+  for (let x = mx - 21; x <= mx + 21; x += 5) R(x, 152, 1, 3, K.win2);
+}
+function sun(sx, sy, r, T) {
+  const sh = Math.floor(8 * T), cs = [K.sunA, K.sunB, K.sunC, K.sunD];
+  for (let dy = -r; dy <= r; dy++) {
+    if (dy >= 4) { const gh = 1 + Math.floor((dy - 4) / 8); if ((((dy - sh) % 8) + 8) % 8 < gh) continue; }
+    const hw = Math.floor(Math.sqrt((r + .5) * (r + .5) - dy * dy));
+    const f = (dy + r) / (2 * r) * 3, i = Math.min(2, Math.floor(f)), fr = f - i;
+    for (let dx = -hw; dx <= hw; dx++) { const x = sx + dx, y = sy + dy; P(x, y, bay(x, y) < fr ? cs[i + 1] : cs[i]); }
+  }
+}
+function cloud(x, y, w) {
+  R(x + 6, y - 4, w - 13, 2, K.clh); R(x + 3, y - 2, w - 6, 2, K.clh);
+  R(x, y, w, 3, K.cl); R(x + 2, y + 3, w - 5, 1, K.cld);
+}
+function cloudRow(y, Pd, w, T, c, off) {
+  const s = Math.floor(Pd * T);
+  for (let k = -1; k * Pd - s + off < W + Pd; k++) cloud(k * Pd - s + off + c, y, w);
+}
+function stars(T) {
+  for (const s of STARS) {
+    const b = Math.sin(TAU * s.k * T + s.ph);
+    if (b > .65) { P(s.x, s.y, K.white); P(s.x - 1, s.y, K.starA); P(s.x + 1, s.y, K.starA); P(s.x, s.y - 1, K.starA); P(s.x, s.y + 1, K.starA); }
+    else if (b > -.4) P(s.x, s.y, K.star);
+  }
+  if (T >= .30 && T < .36) {
+    const p = (T - .30) / .06, hx = 165 - 75 * p, hy = 16 + 32 * p;
+    for (let k = 8; k >= 0; k--) P(hx + k * 1.2, hy - k * .51, k < 2 ? K.white : k < 5 ? K.star : K.starA);
+  }
+}
+function waterGlow(sx, T) {
+  for (let y = HZ + 1; y < HZ + 74; y += 2) {
+    const d = y - HZ;
+    const w = Math.round((19 - d * .2) * (.72 + .28 * Math.sin(TAU * 2 * T + y * .9)));
+    if (w <= 0) continue;
+    const o = Math.round(1.5 * Math.sin(TAU * T + y * .4));
+    const c = d < 14 ? K.sunB : d < 36 ? K.sunC : K.sunD;
+    for (let x = sx - w + o; x < sx + w + o; x++) if (((x * 7 + y * 3) % 11) !== 0) P(x, y, c);
+  }
+}
+const ROWS = Array.from({ length: 15 }, (_, i) => { const u = i / 14; return { u, y: HZ + 3 + Math.round(150 * Math.pow(u, 1.25)), lam: Math.round(9 + 31 * u), sp: i >= 13 ? 2 : 1 }; });
+function waveRow(r, T, c) {
+  const len = Math.max(2, Math.round(r.lam * .42)), s = Math.floor(r.lam * r.sp * T) % r.lam;
+  const cc = r.u < .3 ? K.wv1 : r.u < .6 ? K.wv2 : K.wv3;
+  const off = (r.y * 13) % r.lam;
+  for (let x = -r.lam - s + off + c; x < W + r.lam; x += r.lam) {
+    R(x, r.y, len, 1, cc);
+    if (r.u > .4) R(x + 1, r.y - 1, len - 2, 1, r.u > .7 ? K.wv4 : K.wv3);
+    if (r.u > .78) P(x + Math.floor(len / 2), r.y - 2, K.white);
+  }
+}
+function maiden(kx, T) {
+  const by = 196;
+  R(kx - 8, by + 3, 17, 1, K.stoneD); // yansıma çizgileri
+  for (let y = 201; y < 213; y += 2) { const w = Math.round(7 * (1 - (y - 201) / 13)), o = Math.round(Math.sin(TAU * 2 * T + y)); R(kx - w + o, y, 2 * w, 1, K.stoneD); }
+  R(kx - 11, by - 1, 23, 1, K.rockH); R(kx - 13, by, 27, 1, K.rock); R(kx - 12, by + 1, 25, 1, K.rock); R(kx - 10, by + 2, 21, 1, K.rock); R(kx - 7, by + 3, 15, 1, K.rock);
+  R(kx - 7, 186, 15, 10, K.stone); R(kx - 7, 186, 3, 10, K.stoneD); R(kx - 7, 185, 15, 1, K.warm);
+  for (const [x, k] of [[kx - 4, 1], [kx, 2], [kx + 4, 1]]) R(x, 189, 1, 2, blink(k, x, T, -.5) ? K.win : K.sil);
+  R(kx - 3, 172, 7, 14, K.stone); R(kx - 3, 172, 2, 14, K.stoneD); R(kx, 176, 1, 2, K.sil); R(kx, 181, 1, 2, K.win);
+  for (let j = 0; j < 6; j++) { const hw = Math.floor(j / 2) + 1; R(kx - hw + 1, 166 + j, 2 * hw - 1, 1, K.lead); }
+  R(kx - 3, 171, 7, 1, K.lead);
+  R(kx, 159, 1, 7, K.grey);
+  if (Math.floor(T * 24) % 2) { R(kx + 1, 159, 4, 3, K.red); P(kx + 2, 160, K.white); }
+  else { R(kx + 1, 160, 4, 2, K.red); P(kx + 4, 159, K.red); P(kx + 2, 160, K.white); }
+  if (blink(3, 0, T, .2)) { P(kx, 173, K.white); P(kx - 1, 173, K.win); P(kx + 1, 173, K.win); }
+}
+function ferry(hx, hy, T) {
+  // gövde yansıması
+  for (let y = hy + 1; y < hy + 8; y += 2) { const o = Math.round(1.5 * Math.sin(TAU * 2 * T + y * .7)); for (let x = hx - 32 + o; x < hx + 34 + o; x++) if (((x + y) % 7) > 1) P(x, y, K.wF); }
+  for (let j = 0; j < 7; j++) {
+    const xl = hx - 36 + Math.max(0, j - 3) * 2, xr = hx + 40 - Math.floor(j * 1.5);
+    R(xl, hy - 6 + j, xr - xl, 1, j === 0 ? K.rim : K.hull);
+  }
+  R(hx - 30, hy - 14, 64, 8, K.white); R(hx - 30, hy - 7, 64, 1, K.grey); R(hx - 30, hy - 14, 64, 1, K.warm);
+  for (let x = hx - 27, i = 0; x < hx + 31; x += 4, i++) R(x, hy - 12, 2, 3, blink(1 + (i % 2), i * 1.7, T, -.6) ? K.win : K.glass);
+  for (let x = hx - 30; x < hx + 34; x += 2) P(x, hy - 15, K.white);
+  R(hx - 22, hy - 21, 46, 6, K.white); R(hx - 22, hy - 21, 46, 1, K.warm); R(hx - 22, hy - 16, 46, 1, K.grey);
+  for (let x = hx - 19, i = 0; x < hx + 22; x += 4, i++) R(x, hy - 19, 2, 2, blink(2, i * 2.3, T, -.5) ? K.win : K.glass);
+  R(hx + 14, hy - 26, 10, 5, K.white); R(hx + 14, hy - 26, 10, 1, K.warm); R(hx + 16, hy - 25, 6, 2, K.glass);
+  R(hx - 6, hy - 34, 7, 13, K.funnel); R(hx - 6, hy - 34, 2, 13, K.funnelD); R(hx - 6, hy - 36, 7, 3, K.hull);
+  R(hx + 29, hy - 35, 1, 14, K.grey); R(hx + 30, hy - 35, 3, 2, K.red);
+  // pruva köpüğü
+  const f = Math.floor(T * 36) % 3;
+  for (let i = 0; i < 4; i++) P(hx + 40 + i * 2 + ((i + f) % 3 === 0 ? 1 : 0), hy - 1 + (i + f) % 2, K.white);
+  for (let i = 0; i < 6; i++) P(hx - 38 - i * 3 - f, hy + (i % 2), K.wv4);
+}
+function smoke(fx, fy, T) {
+  const ps = []; for (let i = 0; i < 8; i++) ps.push((T + i / 8) % 1);
+  ps.sort((a, b) => b - a);
+  for (const p of ps) {
+    const x = fx - 30 * p - 2 * Math.sin(TAU * p), y = fy - 44 * p, r = Math.round(1 + 4.5 * p);
+    const dens = Math.min(1, 10 * p) * (p > .6 ? 1 - (p - .6) / .45 : 1);
+    disc(x, y, r, p < .45 ? K.smoke1 : K.smoke2, dens);
+  }
+}
+const GULL_UP = ['#...#', '.#.#.', '..#..'], GULL_DN = ['..#..', '.#.#.', '#...#'];
+function gull(x, y, fr) { const s = fr ? GULL_UP : GULL_DN; for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) if (s[r][c] === '#') P(x + c - 2, y + r - 1, K.white); }
+const LISS = [[60, 72, 40, 10, 1, 2, 0, 7], [118, 52, 34, 9, 1, 2, 2.1, 8], [92, 102, 48, 7, 1, 2, 4.0, 6], [150, 86, 18, 12, 1, 1, 1.0, 9]];
+function gulls(T) {
+  for (const [cx, cy, ax, ay, kx, ky, ph, f] of LISS)
+    gull(Math.round(cx + ax * Math.sin(TAU * kx * T + ph)), Math.round(cy + ay * Math.sin(TAU * ky * T + ph * 1.3)), Math.floor(T * f * 2 + ph) % 2);
+  for (let i = 0; i < 2; i++) {
+    const x = -8 + 196 * ((T + i * .5) % 1), y = 44 + i * 34 + Math.round(3 * Math.sin(TAU * 2 * T + i));
+    gull(Math.round(x), y, Math.floor(T * 16 + i) % 2);
+  }
+}
+const CAT = ['#.....#', '##...##', '#######', '#######', '.#####.', '..###..', '.#####.', '#######', '#######', '#######', '#######'];
+function fore(c, T) {
+  // fener halesi
+  const lx = 158 + c, flick = Math.sin(TAU * 3 * T) > .85 ? 1 : 0;
+  disc(lx, 248, 11 + flick, K.halo, .22); disc(lx, 248, 6, K.win2, .35);
+  R(lx, 250, 2, 56, K.pier); R(lx - 2, 245, 6, 5, K.win); R(lx - 3, 244, 8, 1, K.pier); R(lx - 1, 243, 4, 1, K.pier);
+  // korkuluk ve iskele
+  R(0, 292, W, 2, K.pier2); R(0, 299, W, 1, K.pier2);
+  for (let x = ((c % 14) + 14) % 14 - 14; x < W; x += 14) R(x, 292, 2, 14, K.pier2);
+  R(0, 306, W, 14, K.pier); for (let x = ((c % 6) + 6) % 6 - 6; x < W; x += 6) R(x, 308, 1, 12, K.pier2);
+  R(0, 306, W, 1, K.rim);
+  // kedi (arkadan, gün batımına bakıyor)
+  const cx = 26 + c;
+  for (let r = 0; r < CAT.length; r++) for (let q = 0; q < 7; q++) if (CAT[r][q] === '#') P(cx + q, 295 + r, K.cat);
+  const s = Math.round(1.6 * Math.sin(TAU * T));
+  for (const [dx, dy] of [[7, 10], [8, 10], [9, 9], [9, 8], [9 + Math.round(s / 2), 7], [9 + s, 6], [9 + s, 5]]) P(cx + dx, 295 + dy, K.cat);
+  P(cx, 295, K.rim); P(cx + 6, 295, K.rim);
+}
+const HEART = ['.#.#.', '#####', '.###.', '..#..'];
+function hud(T) {
+  R(0, 0, W, 10, K.black); R(0, 10, W, 1, K.hud);
+  text('SKOR 001453', 3, 3, 1, () => K.white);
+  text('DÜNYA 3-4', W - 3 - 35, 3, 1, () => K.white);
+  for (let h = 0; h < 3; h++) for (let r = 0; r < 4; r++) for (let q = 0; q < 5; q++) if (HEART[r][q] === '#') P(80 + h * 7 + q, 3 + r, K.heart);
+  const sx = -30 + 260 * T;
+  text('İSTANBUL', 59, 24, 2, (x, y) => (x + (y - 24) - sx >= 0 && x + (y - 24) - sx < 4) ? K.white : K.sunB);
+}
+function shadowTitle() { text('İSTANBUL', 60, 25, 2, () => K.s1); }
+
+// --- kare ---
+function frame(T) {
+  B.set(BG);
+  const cam = d => Math.round(Math.sin(TAU * T) * 9 * d);
+  stars(T);
+  sun(126 + cam(.03), 128, 24, T);
+  cloudRow(72, 64, 24, T, cam(.08), 4);
+  cloudRow(96, 48, 18, T, cam(.1), 30);
+  farHills(cam(.06));
+  city(cam(.12), T);
+  galata(48 + cam(.12), T);
+  mosque(133 + cam(.12));
+  waterGlow(126 + cam(.2), T);
+  const kx = 102 + cam(.37), hx = 87 + cam(.71), hy = 257 + Math.round(1.4 * Math.sin(TAU * 2 * T) + .7 * Math.sin(TAU * T));
+  let mDone = false, fDone = false;
+  for (const r of ROWS) {
+    if (!mDone && r.y > 199) { maiden(kx, T); mDone = true; }
+    if (!fDone && r.y > hy) { ferry(hx, hy, T); smoke(hx - 3, hy - 38, T); fDone = true; }
+    waveRow(r, T, cam(.3 + r.u * 1.2));
+  }
+  if (!fDone) { ferry(hx, hy, T); smoke(hx - 3, hy - 38, T); }
+  gulls(T);
+  fore(cam(1.4), T);
+  shadowTitle(); hud(T);
+  g.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(lo, 0, 0, W * SC, H * SC);
+  ctx.drawImage(OVER, 0, 0);
+}
+
+// CRT tarama çizgileri + kenar karartma (bir kez çizilir)
+const OVER = document.createElement('canvas'); OVER.width = W * SC; OVER.height = H * SC;
+(function () {
+  const o = OVER.getContext('2d');
+  o.fillStyle = 'rgba(0,0,0,0.16)'; for (let y = SC - 1; y < OVER.height; y += SC) o.fillRect(0, y, OVER.width, 1);
+  const v = o.createRadialGradient(540, 960, 500, 540, 960, 1150); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.45)');
+  o.fillStyle = v; o.fillRect(0, 0, OVER.width, OVER.height);
+})();
+
+function loop(now) {
+  const T = (typeof window.__T === 'number') ? window.__T : ((now / 1000) % LOOP) / LOOP;
+  frame(Math.floor(T * 120) / 120); // 20 fps adımlı
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// --- chiptune: hicaz makamında 3 ölçülük döngü (120 BPM, 6 sn = görüntüyle aynı döngü) ---
+const NF = { D3:146.83, A2:110, G2:98, D4:293.66, Eb4:311.13, Fs4:369.99, G4:392, A4:440, Bb4:466.16, C5:523.25, D5:587.33 };
+const MEL = ['D5',0,'C5','Bb4','A4',0,0,0,'Bb4','A4','G4','Fs4','G4',0,'A4',0,
+             'Fs4',0,'G4','A4','Bb4',0,'A4','G4','Fs4',0,'Eb4',0,'D4',0,0,0,
+             'A4',0,'A4','Bb4','C5',0,'Bb4','A4','G4','Fs4','Eb4','Fs4','D4',0,'A4',0];
+const BAS = ['D3','D3','A2','D3','D3','D3','G2','D3','D3','A2','D3','A2'];
+const STEP = .125;
+let ac = null, master = null, noise = null, on = false, timer = null, nStep = 0, v0 = 0, a0 = 0;
+function tone(f, t, d, type, vol) {
+  const o = ac.createOscillator(), gn = ac.createGain();
+  o.type = type; o.frequency.value = f;
+  gn.gain.setValueAtTime(vol, t); gn.gain.setValueAtTime(vol, t + d * .7); gn.gain.linearRampToValueAtTime(0, t + d);
+  o.connect(gn).connect(master); o.start(t); o.stop(t + d + .02);
+}
+function hat(t) {
+  const s = ac.createBufferSource(), gn = ac.createGain(), hp = ac.createBiquadFilter();
+  s.buffer = noise; hp.type = 'highpass'; hp.frequency.value = 6000;
+  gn.gain.setValueAtTime(.06, t); gn.gain.exponentialRampToValueAtTime(.001, t + .04);
+  s.connect(hp).connect(gn).connect(master); s.start(t); s.stop(t + .05);
+}
+function playStep(i, t) {
+  const m = MEL[i];
+  if (m) { let r = 1; while (r < 4 && !MEL[(i + r) % 48]) r++; tone(NF[m], t, STEP * r - .02, 'square', .07); }
+  if (i % 4 === 0) tone(NF[BAS[i / 4]], t, STEP * 3.5, 'triangle', .22);
+  if (i % 4 === 2) hat(t);
+  if (i % 16 === 0) tone(NF[m || 'D5'] * 2, t, .05, 'square', .03);
+}
+function sched() {
+  const now = ac.currentTime;
+  for (;;) {
+    const tt = a0 + (nStep * STEP - v0);
+    if (tt > now + .15) break;
+    if (tt >= now - .01) playStep(nStep % 48, tt);
+    nStep++;
+  }
+}
+document.getElementById('ses').onclick = async e => {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = .6; master.connect(ac.destination);
+    noise = ac.createBuffer(1, ac.sampleRate * .05, ac.sampleRate); const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  on = !on;
+  if (on) {
+    await ac.resume();
+    v0 = performance.now() / 1000; a0 = ac.currentTime; nStep = Math.ceil(v0 / STEP);
+    timer = setInterval(sched, 25); sched();
+    e.target.textContent = '■ SES KAPAT';
+  } else {
+    clearInterval(timer); ac.suspend();
+    e.target.textContent = '♪ SES AÇ';
+  }
+};
+</script>
+</body>
+</html>
