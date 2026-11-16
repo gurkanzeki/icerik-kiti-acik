@@ -1,0 +1,5 @@
+node_modules/
+cikti/
+__pycache__/
+remotion-video/public/*.wav
+remotion-video/out/
