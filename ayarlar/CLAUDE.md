@@ -19,6 +19,7 @@
 - Vurgu rengim: #E2541B (turuncu); zemin koyu (#0E0E10).
 - Altyazılar büyük ve kalın, söylenen kelime vurgu renginde yansın.
 - Araçlarım: Whisper (altyazı), Remotion ve HyperFrames (video), Vercel (yayın).
+- Görsel her işte (video sahnesi, sunum, web, arayüz, kapak, grafik) palet sistemi geçerli: `skills/palet-sistemi/SKILL.md`. Palet adı vermezsem önce iki palet öner.
 
 ## Güvenlik
 

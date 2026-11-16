@@ -17,6 +17,7 @@ Yeni bir Claude oturumu bu dosyayı okuyarak kaldığımız yeri bilsin diye tut
 - `remotion-video/src/Shorts.tsx` — sesten altyazılı video (`video-yap` kullanır).
 - `remotion-video/src/Kisa.tsx` — "Aslında" serisi: seslendirmesiz, yazı animasyonlu 9:16 Shorts. Sahneler `SCENES` dizisinde; `*yıldızlı*` kelimeler turuncu.
 - `remotion-video/src/Cikmaz.tsx` — "Gündem" serisi: aynı yazı animasyonu, üstte GÜNDEM, altta kaynak satırı.
+- `/reel` (kök dizin, 16 Kasım 2026) — tek satırdan bitmiş dikey reel: Zeki sesi (ElevenLabs bağlı aracı) + Whisper kelime zamanları + Remotion. Beceri `.claude/skills/reel/SKILL.md`, görünüm `style.md`, kod `src/`, çıktılar `reels/`. İlk reel: `reels/gunes-8-dakika/`. Whisper modeli (`whisper.cpp/`, 1.5 GB) depoda değil; yeni oturumda `node scripts/whisper-kur.mjs`.
 - Üretilen videolar: `videolar/` altında, her biri bir klasör (paket.md, kapak, metin). `02-akp-cikmaz` (Gündem #1).
 
 ## Açık sorunlar
@@ -25,6 +26,7 @@ Yeni bir Claude oturumu bu dosyayı okuyarak kaldığımız yeri bilsin diye tut
 
 1. **Vercel token'ı bozuk.** Ortamdaki "Vercel token" ağ sırrı geçersiz; vekil api.vercel.com isteklerinden kimlik başlığını kaldırıyor, bu yüzden hem kalıcı hem `--temporary` yayın "missing an authentication token" hatası veriyor. Çözüm: ortam ayarlarından sırrı silmek; kalıcı yayın için yeni token'ı güvenli formla yeniden kaydetmek.
 2. **Aslında #1 YouTube'a yüklenmedi.** Video ve paket `videolar/01-mayis-sinegi/` içinde. Metricool ile yüklemek için videonun herkese açık bir linki gerekir (Drive'da "bağlantıya sahip olan herkes" ya da Vercel geçici yayın); yoksa YouTube Studio'dan elle yüklenir.
+4. **ElevenLabs API anahtarı geçersiz.** Güvenli formla kaydedilen anahtarı ElevenLabs "Invalid API key" diye reddediyor. Şimdilik ses bağlı ElevenLabs aracıyla üretiliyor; zaman damgalı API yolu için yeni anahtar gerekir.
 3. **IC-Light** (fotoğraf yeniden ışıklandırma) yalnızca ilk oturumda denendi, kitte yok; GPU olmadan pratik değil.
 
 ## Kullanıcı tercihleri (özet)

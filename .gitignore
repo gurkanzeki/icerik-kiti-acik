@@ -3,3 +3,7 @@ cikti/
 __pycache__/
 remotion-video/public/*.wav
 remotion-video/out/
+dist/
+.env
+out/
+whisper.cpp/
