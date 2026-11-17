@@ -5,6 +5,7 @@ KIT="$(cd "$(dirname "$0")" && pwd)"
 
 pip install --break-system-packages -q torch --index-url https://download.pytorch.org/whl/cpu
 pip install --break-system-packages -q openai-whisper
+pip install --break-system-packages -q "litellm[proxy]"
 npm install -g --no-audit --no-fund hyperframes vercel
 (cd "$KIT/remotion-video" && npm install --no-audit --no-fund)
 

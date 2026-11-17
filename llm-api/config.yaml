@@ -1,0 +1,34 @@
+# LiteLLM proxy ayarı: tüm modeller tek OpenAI uyumlu adreste (http://localhost:4000)
+# Anahtarlar ortam değişkenlerinden okunur; buraya ASLA gerçek anahtar yazma.
+model_list:
+  # --- Claude (Anthropic) ---
+  - model_name: claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # --- OpenAI (anahtar varsa çalışır) ---
+  - model_name: gpt
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  # --- Google Gemini (anahtar varsa çalışır) ---
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-2.5-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true   # bir sağlayıcının desteklemediği parametreleri sessizce at
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY   # proxy'ye erişim şifresi (sk-... ile başlamalı)

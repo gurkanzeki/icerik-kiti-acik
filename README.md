@@ -25,6 +25,7 @@ Seçenekler: `--renk "#1F4FD8"` (vurgu rengi), `--model medium` (daha doğru alt
 | Yol | Ne |
 |---|---|
 | `video-yap.py` | Pipeline (Windows, Mac, Linux) |
+| `llm-api/` | LiteLLM proxy: Claude/GPT/Gemini tek adreste (`localhost:4000`) |
 | `remotion-video/` | Remotion projesi; Shorts şablonu `src/Shorts.tsx` |
 | `ayarlar/CLAUDE.md` | Kişisel Claude tercihleri → `~/.claude/CLAUDE.md` |
 | `skills/` | 15 Claude Code becerisi (5'i kendi Türkçe skill'lerim) → `~/.claude/skills/` |
