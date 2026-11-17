@@ -21,6 +21,7 @@ Yenile
 Adim "2/7  Whisper (altyazı)"
 python -m pip install --upgrade pip
 python -m pip install openai-whisper
+python -m pip install "litellm[proxy]"
 
 Adim "3/7  Claude Code, HyperFrames, Vercel"
 npm install -g @anthropic-ai/claude-code hyperframes vercel
