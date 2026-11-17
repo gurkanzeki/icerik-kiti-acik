@@ -3,6 +3,14 @@
 Claude, GPT ve Gemini'yi **tek bir OpenAI uyumlu adreste** toplar: `http://localhost:4000`.
 Kod hangi sağlayıcıyı kullanırsa kullansın aynı biçimde istek atar; model adını değiştirmek yeter.
 
+## En kolayı (Windows, tek komut)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\llm-api\tek-tik-kur.ps1
+```
+
+Kurar, anahtarı gizli olarak sorup kalıcı kaydeder, proxy'yi başlatır ve dener.
+
 ## Kurulum
 
 ```bash
